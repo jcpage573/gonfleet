@@ -95,7 +95,7 @@ func (c *Client) List(params onfleet.RoutePlanListQueryParams) (onfleet.RoutePla
 		c.rlHttpClient,
 		http.MethodGet,
 		c.url,
-		[]string{"all"},
+		nil,
 		params,
 		nil,
 		&paginatedRoutePlans,
