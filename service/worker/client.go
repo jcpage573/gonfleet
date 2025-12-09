@@ -213,3 +213,47 @@ func (c *Client) Delete(workerId string) error {
 	)
 	return err
 }
+
+// Reference https://docs.onfleet.com/reference/metadata
+// MetadataSet atomically adds or updates metadata fields without affecting other metadata
+func (c *Client) MetadataSet(workerId string, metadata ...onfleet.Metadata) (onfleet.Worker, error) {
+	worker := onfleet.Worker{}
+	body := map[string]any{
+		"metadata": map[string]any{
+			"$set": metadata,
+		},
+	}
+	err := c.call(
+		c.apiKey,
+		c.rlHttpClient,
+		http.MethodPut,
+		c.url,
+		[]string{workerId},
+		nil,
+		body,
+		&worker,
+	)
+	return worker, err
+}
+
+// Reference https://docs.onfleet.com/reference/metadata
+// MetadataPop atomically removes metadata fields without affecting other metadata
+func (c *Client) MetadataPop(workerId string, names ...string) (onfleet.Worker, error) {
+	worker := onfleet.Worker{}
+	body := map[string]any{
+		"metadata": map[string]any{
+			"$pop": names,
+		},
+	}
+	err := c.call(
+		c.apiKey,
+		c.rlHttpClient,
+		http.MethodPut,
+		c.url,
+		[]string{workerId},
+		nil,
+		body,
+		&worker,
+	)
+	return worker, err
+}

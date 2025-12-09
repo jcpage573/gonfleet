@@ -70,3 +70,47 @@ func (c *Client) ListWithMetadataQuery(metadata []onfleet.Metadata) ([]onfleet.D
 	)
 	return destinations, err
 }
+
+// Reference https://docs.onfleet.com/reference/metadata
+// MetadataSet atomically adds or updates metadata fields without affecting other metadata
+func (c *Client) MetadataSet(destinationId string, metadata ...onfleet.Metadata) (onfleet.Destination, error) {
+	destination := onfleet.Destination{}
+	body := map[string]any{
+		"metadata": map[string]any{
+			"$set": metadata,
+		},
+	}
+	err := c.call(
+		c.apiKey,
+		c.rlHttpClient,
+		http.MethodPut,
+		c.url,
+		[]string{destinationId},
+		nil,
+		body,
+		&destination,
+	)
+	return destination, err
+}
+
+// Reference https://docs.onfleet.com/reference/metadata
+// MetadataPop atomically removes metadata fields without affecting other metadata
+func (c *Client) MetadataPop(destinationId string, names ...string) (onfleet.Destination, error) {
+	destination := onfleet.Destination{}
+	body := map[string]any{
+		"metadata": map[string]any{
+			"$pop": names,
+		},
+	}
+	err := c.call(
+		c.apiKey,
+		c.rlHttpClient,
+		http.MethodPut,
+		c.url,
+		[]string{destinationId},
+		nil,
+		body,
+		&destination,
+	)
+	return destination, err
+}

@@ -63,7 +63,7 @@ func (c *Client) AddTasks(routePlanId string, params onfleet.RoutePlanAddTasksPa
 		c.rlHttpClient,
 		http.MethodPut,
 		c.url,
-		[]string{routePlanId},
+		[]string{routePlanId, "tasks"},
 		nil,
 		params,
 		&routePlan,
@@ -88,8 +88,8 @@ func (c *Client) Get(routePlanId string) (onfleet.RoutePlan, error) {
 }
 
 // Reference https://docs.onfleet.com/reference/get-route-plan
-func (c *Client) List(params onfleet.RoutePlanListQueryParams) (onfleet.RoutePlansPaginated, error) {
-	paginatedRoutePlans := onfleet.RoutePlansPaginated{}
+func (c *Client) List(params onfleet.RoutePlanListQueryParams) ([]onfleet.RoutePlan, error) {
+	var routePlans []onfleet.RoutePlan
 	err := c.call(
 		c.apiKey,
 		c.rlHttpClient,
@@ -98,9 +98,9 @@ func (c *Client) List(params onfleet.RoutePlanListQueryParams) (onfleet.RoutePla
 		nil,
 		params,
 		nil,
-		&paginatedRoutePlans,
+		&routePlans,
 	)
-	return paginatedRoutePlans, err
+	return routePlans, err
 }
 
 // Reference https://docs.onfleet.com/reference/delete-routePlan

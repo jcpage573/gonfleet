@@ -228,3 +228,47 @@ func (c *Client) AutoAssignMulti(params onfleet.TaskAutoAssignMultiParams) (onfl
 	)
 	return autoAssignMulti, err
 }
+
+// Reference https://docs.onfleet.com/reference/metadata
+// MetadataSet atomically adds or updates metadata fields without affecting other metadata
+func (c *Client) MetadataSet(taskId string, metadata ...onfleet.Metadata) (onfleet.Task, error) {
+	task := onfleet.Task{}
+	body := map[string]any{
+		"metadata": map[string]any{
+			"$set": metadata,
+		},
+	}
+	err := c.call(
+		c.apiKey,
+		c.rlHttpClient,
+		http.MethodPut,
+		c.url,
+		[]string{taskId},
+		nil,
+		body,
+		&task,
+	)
+	return task, err
+}
+
+// Reference https://docs.onfleet.com/reference/metadata
+// MetadataPop atomically removes metadata fields without affecting other metadata
+func (c *Client) MetadataPop(taskId string, names ...string) (onfleet.Task, error) {
+	task := onfleet.Task{}
+	body := map[string]any{
+		"metadata": map[string]any{
+			"$pop": names,
+		},
+	}
+	err := c.call(
+		c.apiKey,
+		c.rlHttpClient,
+		http.MethodPut,
+		c.url,
+		[]string{taskId},
+		nil,
+		body,
+		&task,
+	)
+	return task, err
+}

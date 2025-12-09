@@ -101,3 +101,47 @@ func (c *Client) Delete(adminId string) error {
 	)
 	return err
 }
+
+// Reference https://docs.onfleet.com/reference/metadata
+// MetadataSet atomically adds or updates metadata fields without affecting other metadata
+func (c *Client) MetadataSet(adminId string, metadata ...onfleet.Metadata) (onfleet.Admin, error) {
+	admin := onfleet.Admin{}
+	body := map[string]any{
+		"metadata": map[string]any{
+			"$set": metadata,
+		},
+	}
+	err := c.call(
+		c.apiKey,
+		c.rlHttpClient,
+		http.MethodPut,
+		c.url,
+		[]string{adminId},
+		nil,
+		body,
+		&admin,
+	)
+	return admin, err
+}
+
+// Reference https://docs.onfleet.com/reference/metadata
+// MetadataPop atomically removes metadata fields without affecting other metadata
+func (c *Client) MetadataPop(adminId string, names ...string) (onfleet.Admin, error) {
+	admin := onfleet.Admin{}
+	body := map[string]any{
+		"metadata": map[string]any{
+			"$pop": names,
+		},
+	}
+	err := c.call(
+		c.apiKey,
+		c.rlHttpClient,
+		http.MethodPut,
+		c.url,
+		[]string{adminId},
+		nil,
+		body,
+		&admin,
+	)
+	return admin, err
+}
