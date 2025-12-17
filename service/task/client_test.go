@@ -561,3 +561,267 @@ func TestClient_DifferentConfigurations(t *testing.T) {
 		})
 	}
 }
+
+func TestClient_List_FilterByState(t *testing.T) {
+	tests := []struct {
+		name  string
+		state string
+	}{
+		{"unassigned tasks", "0"},
+		{"assigned tasks", "1"},
+		{"active tasks", "2"},
+		{"completed tasks", "3"},
+		{"multiple states", "0,1,2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := testingutil.SetupTest(t)
+			defer testingutil.CleanupTest(t, mockClient)
+
+			expectedTasks := onfleet.TasksPaginated{
+				Tasks: []onfleet.Task{
+					testingutil.GetSampleTask(),
+				},
+				LastId: "last_task_123",
+			}
+
+			mockClient.AddResponse("/tasks", testingutil.MockResponse{
+				StatusCode: 200,
+				Body:       expectedTasks,
+			})
+
+			client := Plug("test_api_key", nil, "https://api.example.com/tasks", mockClient.MockCaller)
+
+			params := onfleet.TaskListQueryParams{
+				From:  1640995200,
+				To:    1672531199,
+				State: tt.state,
+			}
+
+			tasks, err := client.List(params)
+
+			assert.NoError(t, err)
+			assert.Len(t, tasks.Tasks, 1)
+			assert.Equal(t, expectedTasks.LastId, tasks.LastId)
+
+			mockClient.AssertRequestMade("GET", "/tasks")
+		})
+	}
+}
+
+func TestClient_List_FilterByContainer(t *testing.T) {
+	tests := []struct {
+		name       string
+		containers string
+	}{
+		{"single worker container", "worker_123"},
+		{"single team container", "team_456"},
+		{"multiple containers", "worker_123,team_456"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := testingutil.SetupTest(t)
+			defer testingutil.CleanupTest(t, mockClient)
+
+			expectedTasks := onfleet.TasksPaginated{
+				Tasks: []onfleet.Task{
+					testingutil.GetSampleTask(),
+				},
+				LastId: "last_task_789",
+			}
+
+			mockClient.AddResponse("/tasks", testingutil.MockResponse{
+				StatusCode: 200,
+				Body:       expectedTasks,
+			})
+
+			client := Plug("test_api_key", nil, "https://api.example.com/tasks", mockClient.MockCaller)
+
+			params := onfleet.TaskListQueryParams{
+				From:       1640995200,
+				To:         1672531199,
+				Containers: tt.containers,
+			}
+
+			tasks, err := client.List(params)
+
+			assert.NoError(t, err)
+			assert.Len(t, tasks.Tasks, 1)
+			assert.Equal(t, expectedTasks.LastId, tasks.LastId)
+
+			mockClient.AssertRequestMade("GET", "/tasks")
+		})
+	}
+}
+
+func TestClient_MetadataSet(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	// Response after setting the field
+	expectedTask := testingutil.GetSampleTask()
+	expectedTask.Metadata = []onfleet.Metadata{
+		{
+			Name:  "pnd_order_num",
+			Type:  "string",
+			Value: "12345",
+		},
+	}
+
+	mockClient.AddResponse("/tasks/task_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedTask,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/tasks", mockClient.MockCaller)
+
+	metadata := []onfleet.Metadata{
+		{
+			Name:  "pnd_order_num",
+			Type:  "string",
+			Value: "12345",
+		},
+	}
+
+	task, err := client.MetadataSet("task_123", metadata...)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTask.ID, task.ID)
+
+	// Verify the field was set
+	assert.Len(t, task.Metadata, 1)
+	assert.Equal(t, "pnd_order_num", task.Metadata[0].Name)
+	assert.Equal(t, "12345", task.Metadata[0].Value)
+
+	mockClient.AssertRequestMade("PUT", "/tasks/task_123")
+}
+
+func TestClient_MetadataSet_Atomicity(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	// Response after setting: existing field preserved, new field added
+	expectedTask := testingutil.GetSampleTask()
+	expectedTask.Metadata = []onfleet.Metadata{
+		{
+			Name:  "existing_field",
+			Type:  "string",
+			Value: "existing_value",
+		},
+		{
+			Name:  "new_field",
+			Type:  "string",
+			Value: "new_value",
+		},
+	}
+
+	mockClient.AddResponse("/tasks/task_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedTask,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/tasks", mockClient.MockCaller)
+
+	// Set only new_field
+	metadata := []onfleet.Metadata{
+		{
+			Name:  "new_field",
+			Type:  "string",
+			Value: "new_value",
+		},
+	}
+
+	task, err := client.MetadataSet("task_123", metadata...)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTask.ID, task.ID)
+
+	// Verify both fields are present (atomicity - existing_field was preserved)
+	assert.Len(t, task.Metadata, 2)
+
+	var foundExisting, foundNew bool
+	for _, m := range task.Metadata {
+		if m.Name == "existing_field" {
+			foundExisting = true
+			assert.Equal(t, "existing_value", m.Value)
+		}
+		if m.Name == "new_field" {
+			foundNew = true
+			assert.Equal(t, "new_value", m.Value)
+		}
+	}
+	assert.True(t, foundExisting, "existing_field should be preserved")
+	assert.True(t, foundNew, "new_field should be set")
+
+	mockClient.AssertRequestMade("PUT", "/tasks/task_123")
+}
+
+func TestClient_MetadataPop(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	// Response after popping: field is removed
+	expectedTask := testingutil.GetSampleTask()
+	expectedTask.Metadata = []onfleet.Metadata{}
+
+	mockClient.AddResponse("/tasks/task_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedTask,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/tasks", mockClient.MockCaller)
+
+	task, err := client.MetadataPop("task_123", "error")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTask.ID, task.ID)
+
+	// Verify the field was removed
+	assert.Len(t, task.Metadata, 0)
+	for _, m := range task.Metadata {
+		assert.NotEqual(t, "error", m.Name, "error field should be removed")
+	}
+
+	mockClient.AssertRequestMade("PUT", "/tasks/task_123")
+}
+
+func TestClient_MetadataPop_Atomicity(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	// Response after popping: field_to_remove is gone, field_to_keep remains
+	expectedTask := testingutil.GetSampleTask()
+	expectedTask.Metadata = []onfleet.Metadata{
+		{
+			Name:  "field_to_keep",
+			Type:  "string",
+			Value: "preserved_value",
+		},
+	}
+
+	mockClient.AddResponse("/tasks/task_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedTask,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/tasks", mockClient.MockCaller)
+
+	task, err := client.MetadataPop("task_123", "field_to_remove")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTask.ID, task.ID)
+
+	// Verify field_to_keep was preserved (atomicity)
+	assert.Len(t, task.Metadata, 1)
+	assert.Equal(t, "field_to_keep", task.Metadata[0].Name)
+	assert.Equal(t, "preserved_value", task.Metadata[0].Value)
+
+	// Verify field_to_remove is not present
+	for _, m := range task.Metadata {
+		assert.NotEqual(t, "field_to_remove", m.Name, "field_to_remove should not be present")
+	}
+
+	mockClient.AssertRequestMade("PUT", "/tasks/task_123")
+}

@@ -381,3 +381,169 @@ func TestClient_ErrorScenarios(t *testing.T) {
 		})
 	}
 }
+
+func TestClient_MetadataSet(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedAdmin := testingutil.GetSampleAdmin()
+	expectedAdmin.Metadata = []onfleet.Metadata{
+		{
+			Name:  "role",
+			Type:  "string",
+			Value: "manager",
+		},
+	}
+
+	mockClient.AddResponse("/admins/admin_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedAdmin,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/admins", mockClient.MockCaller)
+
+	metadata := []onfleet.Metadata{
+		{
+			Name:  "role",
+			Type:  "string",
+			Value: "manager",
+		},
+	}
+
+	admin, err := client.MetadataSet("admin_123", metadata...)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedAdmin.ID, admin.ID)
+
+	// Verify the field was set
+	assert.Len(t, admin.Metadata, 1)
+	assert.Equal(t, "role", admin.Metadata[0].Name)
+	assert.Equal(t, "manager", admin.Metadata[0].Value)
+
+	mockClient.AssertRequestMade("PUT", "/admins/admin_123")
+}
+
+func TestClient_MetadataSet_Atomicity(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedAdmin := testingutil.GetSampleAdmin()
+	expectedAdmin.Metadata = []onfleet.Metadata{
+		{
+			Name:  "department",
+			Type:  "string",
+			Value: "operations",
+		},
+		{
+			Name:  "level",
+			Type:  "number",
+			Value: float64(3),
+		},
+	}
+
+	mockClient.AddResponse("/admins/admin_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedAdmin,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/admins", mockClient.MockCaller)
+
+	// Set only level field
+	metadata := []onfleet.Metadata{
+		{
+			Name:  "level",
+			Type:  "number",
+			Value: float64(3),
+		},
+	}
+
+	admin, err := client.MetadataSet("admin_123", metadata...)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedAdmin.ID, admin.ID)
+
+	// Verify both fields are present (atomicity - department was preserved)
+	assert.Len(t, admin.Metadata, 2)
+
+	var foundDepartment, foundLevel bool
+	for _, m := range admin.Metadata {
+		if m.Name == "department" {
+			foundDepartment = true
+			assert.Equal(t, "operations", m.Value)
+		}
+		if m.Name == "level" {
+			foundLevel = true
+			assert.Equal(t, float64(3), m.Value)
+		}
+	}
+	assert.True(t, foundDepartment, "department field should be preserved")
+	assert.True(t, foundLevel, "level field should be set")
+
+	mockClient.AssertRequestMade("PUT", "/admins/admin_123")
+}
+
+func TestClient_MetadataPop(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedAdmin := testingutil.GetSampleAdmin()
+	expectedAdmin.Metadata = []onfleet.Metadata{}
+
+	mockClient.AddResponse("/admins/admin_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedAdmin,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/admins", mockClient.MockCaller)
+
+	admin, err := client.MetadataPop("admin_123", "temp_access")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedAdmin.ID, admin.ID)
+
+	// Verify the field was removed
+	assert.Len(t, admin.Metadata, 0)
+	for _, m := range admin.Metadata {
+		assert.NotEqual(t, "temp_access", m.Name, "temp_access field should be removed")
+	}
+
+	mockClient.AssertRequestMade("PUT", "/admins/admin_123")
+}
+
+func TestClient_MetadataPop_Atomicity(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedAdmin := testingutil.GetSampleAdmin()
+	expectedAdmin.Metadata = []onfleet.Metadata{
+		{
+			Name:  "department",
+			Type:  "string",
+			Value: "operations",
+		},
+	}
+
+	mockClient.AddResponse("/admins/admin_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedAdmin,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/admins", mockClient.MockCaller)
+
+	admin, err := client.MetadataPop("admin_123", "old_field")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedAdmin.ID, admin.ID)
+
+	// Verify department was preserved (atomicity)
+	assert.Len(t, admin.Metadata, 1)
+	assert.Equal(t, "department", admin.Metadata[0].Name)
+	assert.Equal(t, "operations", admin.Metadata[0].Value)
+
+	// Verify old_field is not present
+	for _, m := range admin.Metadata {
+		assert.NotEqual(t, "old_field", m.Name, "old_field should not be present")
+	}
+
+	mockClient.AssertRequestMade("PUT", "/admins/admin_123")
+}

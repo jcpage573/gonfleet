@@ -587,3 +587,169 @@ func TestClient_ErrorScenarios(t *testing.T) {
 		})
 	}
 }
+
+func TestClient_MetadataSet(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedWorker := testingutil.GetSampleWorker()
+	expectedWorker.Metadata = []onfleet.Metadata{
+		{
+			Name:  "employee_id",
+			Type:  "string",
+			Value: "EMP123",
+		},
+	}
+
+	mockClient.AddResponse("/workers/worker_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedWorker,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/workers", mockClient.MockCaller)
+
+	metadata := []onfleet.Metadata{
+		{
+			Name:  "employee_id",
+			Type:  "string",
+			Value: "EMP123",
+		},
+	}
+
+	worker, err := client.MetadataSet("worker_123", metadata...)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedWorker.ID, worker.ID)
+
+	// Verify the field was set
+	assert.Len(t, worker.Metadata, 1)
+	assert.Equal(t, "employee_id", worker.Metadata[0].Name)
+	assert.Equal(t, "EMP123", worker.Metadata[0].Value)
+
+	mockClient.AssertRequestMade("PUT", "/workers/worker_123")
+}
+
+func TestClient_MetadataSet_Atomicity(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedWorker := testingutil.GetSampleWorker()
+	expectedWorker.Metadata = []onfleet.Metadata{
+		{
+			Name:  "department",
+			Type:  "string",
+			Value: "delivery",
+		},
+		{
+			Name:  "shift",
+			Type:  "string",
+			Value: "morning",
+		},
+	}
+
+	mockClient.AddResponse("/workers/worker_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedWorker,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/workers", mockClient.MockCaller)
+
+	// Set only shift field
+	metadata := []onfleet.Metadata{
+		{
+			Name:  "shift",
+			Type:  "string",
+			Value: "morning",
+		},
+	}
+
+	worker, err := client.MetadataSet("worker_123", metadata...)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedWorker.ID, worker.ID)
+
+	// Verify both fields are present (atomicity - department was preserved)
+	assert.Len(t, worker.Metadata, 2)
+
+	var foundDepartment, foundShift bool
+	for _, m := range worker.Metadata {
+		if m.Name == "department" {
+			foundDepartment = true
+			assert.Equal(t, "delivery", m.Value)
+		}
+		if m.Name == "shift" {
+			foundShift = true
+			assert.Equal(t, "morning", m.Value)
+		}
+	}
+	assert.True(t, foundDepartment, "department field should be preserved")
+	assert.True(t, foundShift, "shift field should be set")
+
+	mockClient.AssertRequestMade("PUT", "/workers/worker_123")
+}
+
+func TestClient_MetadataPop(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedWorker := testingutil.GetSampleWorker()
+	expectedWorker.Metadata = []onfleet.Metadata{}
+
+	mockClient.AddResponse("/workers/worker_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedWorker,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/workers", mockClient.MockCaller)
+
+	worker, err := client.MetadataPop("worker_123", "temp_flag")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedWorker.ID, worker.ID)
+
+	// Verify the field was removed
+	assert.Len(t, worker.Metadata, 0)
+	for _, m := range worker.Metadata {
+		assert.NotEqual(t, "temp_flag", m.Name, "temp_flag field should be removed")
+	}
+
+	mockClient.AssertRequestMade("PUT", "/workers/worker_123")
+}
+
+func TestClient_MetadataPop_Atomicity(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedWorker := testingutil.GetSampleWorker()
+	expectedWorker.Metadata = []onfleet.Metadata{
+		{
+			Name:  "employee_id",
+			Type:  "string",
+			Value: "EMP456",
+		},
+	}
+
+	mockClient.AddResponse("/workers/worker_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedWorker,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/workers", mockClient.MockCaller)
+
+	worker, err := client.MetadataPop("worker_123", "old_field")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedWorker.ID, worker.ID)
+
+	// Verify employee_id was preserved (atomicity)
+	assert.Len(t, worker.Metadata, 1)
+	assert.Equal(t, "employee_id", worker.Metadata[0].Name)
+	assert.Equal(t, "EMP456", worker.Metadata[0].Value)
+
+	// Verify old_field is not present
+	for _, m := range worker.Metadata {
+		assert.NotEqual(t, "old_field", m.Name, "old_field should not be present")
+	}
+
+	mockClient.AssertRequestMade("PUT", "/workers/worker_123")
+}

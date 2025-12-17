@@ -276,3 +276,169 @@ func TestClient_PhoneNumberEncoding(t *testing.T) {
 		})
 	}
 }
+
+func TestClient_MetadataSet(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedRecipient := testingutil.GetSampleRecipient()
+	expectedRecipient.Metadata = []onfleet.Metadata{
+		{
+			Name:  "customer_id",
+			Type:  "string",
+			Value: "CUST12345",
+		},
+	}
+
+	mockClient.AddResponse("/recipients/recipient_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedRecipient,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/recipients", mockClient.MockCaller)
+
+	metadata := []onfleet.Metadata{
+		{
+			Name:  "customer_id",
+			Type:  "string",
+			Value: "CUST12345",
+		},
+	}
+
+	recipient, err := client.MetadataSet("recipient_123", metadata...)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedRecipient.ID, recipient.ID)
+
+	// Verify the field was set
+	assert.Len(t, recipient.Metadata, 1)
+	assert.Equal(t, "customer_id", recipient.Metadata[0].Name)
+	assert.Equal(t, "CUST12345", recipient.Metadata[0].Value)
+
+	mockClient.AssertRequestMade("PUT", "/recipients/recipient_123")
+}
+
+func TestClient_MetadataSet_Atomicity(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedRecipient := testingutil.GetSampleRecipient()
+	expectedRecipient.Metadata = []onfleet.Metadata{
+		{
+			Name:  "customer_tier",
+			Type:  "string",
+			Value: "gold",
+		},
+		{
+			Name:  "loyalty_points",
+			Type:  "number",
+			Value: float64(500),
+		},
+	}
+
+	mockClient.AddResponse("/recipients/recipient_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedRecipient,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/recipients", mockClient.MockCaller)
+
+	// Set only loyalty_points field
+	metadata := []onfleet.Metadata{
+		{
+			Name:  "loyalty_points",
+			Type:  "number",
+			Value: float64(500),
+		},
+	}
+
+	recipient, err := client.MetadataSet("recipient_123", metadata...)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedRecipient.ID, recipient.ID)
+
+	// Verify both fields are present (atomicity - customer_tier was preserved)
+	assert.Len(t, recipient.Metadata, 2)
+
+	var foundTier, foundPoints bool
+	for _, m := range recipient.Metadata {
+		if m.Name == "customer_tier" {
+			foundTier = true
+			assert.Equal(t, "gold", m.Value)
+		}
+		if m.Name == "loyalty_points" {
+			foundPoints = true
+			assert.Equal(t, float64(500), m.Value)
+		}
+	}
+	assert.True(t, foundTier, "customer_tier field should be preserved")
+	assert.True(t, foundPoints, "loyalty_points field should be set")
+
+	mockClient.AssertRequestMade("PUT", "/recipients/recipient_123")
+}
+
+func TestClient_MetadataPop(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedRecipient := testingutil.GetSampleRecipient()
+	expectedRecipient.Metadata = []onfleet.Metadata{}
+
+	mockClient.AddResponse("/recipients/recipient_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedRecipient,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/recipients", mockClient.MockCaller)
+
+	recipient, err := client.MetadataPop("recipient_123", "temp_note")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedRecipient.ID, recipient.ID)
+
+	// Verify the field was removed
+	assert.Len(t, recipient.Metadata, 0)
+	for _, m := range recipient.Metadata {
+		assert.NotEqual(t, "temp_note", m.Name, "temp_note field should be removed")
+	}
+
+	mockClient.AssertRequestMade("PUT", "/recipients/recipient_123")
+}
+
+func TestClient_MetadataPop_Atomicity(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedRecipient := testingutil.GetSampleRecipient()
+	expectedRecipient.Metadata = []onfleet.Metadata{
+		{
+			Name:  "customer_id",
+			Type:  "string",
+			Value: "CUST99999",
+		},
+	}
+
+	mockClient.AddResponse("/recipients/recipient_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedRecipient,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/recipients", mockClient.MockCaller)
+
+	recipient, err := client.MetadataPop("recipient_123", "old_field")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedRecipient.ID, recipient.ID)
+
+	// Verify customer_id was preserved (atomicity)
+	assert.Len(t, recipient.Metadata, 1)
+	assert.Equal(t, "customer_id", recipient.Metadata[0].Name)
+	assert.Equal(t, "CUST99999", recipient.Metadata[0].Value)
+
+	// Verify old_field is not present
+	for _, m := range recipient.Metadata {
+		assert.NotEqual(t, "old_field", m.Name, "old_field should not be present")
+	}
+
+	mockClient.AssertRequestMade("PUT", "/recipients/recipient_123")
+}

@@ -129,3 +129,169 @@ func TestClient_ErrorScenarios(t *testing.T) {
 		})
 	}
 }
+
+func TestClient_MetadataSet(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedDestination := testingutil.GetSampleDestination()
+	expectedDestination.Metadata = []onfleet.Metadata{
+		{
+			Name:  "location_type",
+			Type:  "string",
+			Value: "warehouse",
+		},
+	}
+
+	mockClient.AddResponse("/destinations/destination_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedDestination,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/destinations", mockClient.MockCaller)
+
+	metadata := []onfleet.Metadata{
+		{
+			Name:  "location_type",
+			Type:  "string",
+			Value: "warehouse",
+		},
+	}
+
+	destination, err := client.MetadataSet("destination_123", metadata...)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedDestination.ID, destination.ID)
+
+	// Verify the field was set
+	assert.Len(t, destination.Metadata, 1)
+	assert.Equal(t, "location_type", destination.Metadata[0].Name)
+	assert.Equal(t, "warehouse", destination.Metadata[0].Value)
+
+	mockClient.AssertRequestMade("PUT", "/destinations/destination_123")
+}
+
+func TestClient_MetadataSet_Atomicity(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedDestination := testingutil.GetSampleDestination()
+	expectedDestination.Metadata = []onfleet.Metadata{
+		{
+			Name:  "building_code",
+			Type:  "string",
+			Value: "B123",
+		},
+		{
+			Name:  "floor",
+			Type:  "number",
+			Value: float64(3),
+		},
+	}
+
+	mockClient.AddResponse("/destinations/destination_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedDestination,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/destinations", mockClient.MockCaller)
+
+	// Set only floor field
+	metadata := []onfleet.Metadata{
+		{
+			Name:  "floor",
+			Type:  "number",
+			Value: float64(3),
+		},
+	}
+
+	destination, err := client.MetadataSet("destination_123", metadata...)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedDestination.ID, destination.ID)
+
+	// Verify both fields are present (atomicity - building_code was preserved)
+	assert.Len(t, destination.Metadata, 2)
+
+	var foundBuilding, foundFloor bool
+	for _, m := range destination.Metadata {
+		if m.Name == "building_code" {
+			foundBuilding = true
+			assert.Equal(t, "B123", m.Value)
+		}
+		if m.Name == "floor" {
+			foundFloor = true
+			assert.Equal(t, float64(3), m.Value)
+		}
+	}
+	assert.True(t, foundBuilding, "building_code field should be preserved")
+	assert.True(t, foundFloor, "floor field should be set")
+
+	mockClient.AssertRequestMade("PUT", "/destinations/destination_123")
+}
+
+func TestClient_MetadataPop(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedDestination := testingutil.GetSampleDestination()
+	expectedDestination.Metadata = []onfleet.Metadata{}
+
+	mockClient.AddResponse("/destinations/destination_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedDestination,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/destinations", mockClient.MockCaller)
+
+	destination, err := client.MetadataPop("destination_123", "temp_flag")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedDestination.ID, destination.ID)
+
+	// Verify the field was removed
+	assert.Len(t, destination.Metadata, 0)
+	for _, m := range destination.Metadata {
+		assert.NotEqual(t, "temp_flag", m.Name, "temp_flag field should be removed")
+	}
+
+	mockClient.AssertRequestMade("PUT", "/destinations/destination_123")
+}
+
+func TestClient_MetadataPop_Atomicity(t *testing.T) {
+	mockClient := testingutil.SetupTest(t)
+	defer testingutil.CleanupTest(t, mockClient)
+
+	expectedDestination := testingutil.GetSampleDestination()
+	expectedDestination.Metadata = []onfleet.Metadata{
+		{
+			Name:  "location_type",
+			Type:  "string",
+			Value: "residential",
+		},
+	}
+
+	mockClient.AddResponse("/destinations/destination_123", testingutil.MockResponse{
+		StatusCode: 200,
+		Body:       expectedDestination,
+	})
+
+	client := Plug("test_api_key", nil, "https://api.example.com/destinations", mockClient.MockCaller)
+
+	destination, err := client.MetadataPop("destination_123", "old_field")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedDestination.ID, destination.ID)
+
+	// Verify location_type was preserved (atomicity)
+	assert.Len(t, destination.Metadata, 1)
+	assert.Equal(t, "location_type", destination.Metadata[0].Name)
+	assert.Equal(t, "residential", destination.Metadata[0].Value)
+
+	// Verify old_field is not present
+	for _, m := range destination.Metadata {
+		assert.NotEqual(t, "old_field", m.Name, "old_field should not be present")
+	}
+
+	mockClient.AssertRequestMade("PUT", "/destinations/destination_123")
+}
