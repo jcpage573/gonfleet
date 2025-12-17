@@ -97,9 +97,15 @@ func (c *Client) MetadataSet(destinationId string, metadata ...onfleet.Metadata)
 // MetadataPop atomically removes metadata fields without affecting other metadata
 func (c *Client) MetadataPop(destinationId string, names ...string) (onfleet.Destination, error) {
 	destination := onfleet.Destination{}
+
+	popArray := make([]map[string]string, len(names))
+	for i, name := range names {
+		popArray[i] = map[string]string{"name": name}
+	}
+
 	body := map[string]any{
 		"metadata": map[string]any{
-			"$pop": names,
+			"$pop": popArray,
 		},
 	}
 	err := c.call(
