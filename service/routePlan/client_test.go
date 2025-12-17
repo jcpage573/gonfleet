@@ -13,12 +13,12 @@ func TestClient_Create(t *testing.T) {
 	defer testingutil.CleanupTest(t, mockClient)
 
 	expectedRoutePlan := testingutil.GetSampleRoutePlan()
-	mockClient.AddResponse("/route-plans", testingutil.MockResponse{
+	mockClient.AddResponse("/routePlans", testingutil.MockResponse{
 		StatusCode: 201,
 		Body:       expectedRoutePlan,
 	})
 
-	client := Plug("test_api_key", nil, "https://api.example.com/route-plans", mockClient.MockCaller)
+	client := Plug("test_api_key", nil, "https://api.example.com/routePlans", mockClient.MockCaller)
 
 	params := onfleet.RoutePlanParams{
 		Name:          "Evening Delivery Route",
@@ -43,7 +43,7 @@ func TestClient_Create(t *testing.T) {
 	assert.Equal(t, expectedRoutePlan.Name, routePlan.Name)
 	assert.Equal(t, expectedRoutePlan.VehicleType, routePlan.VehicleType)
 
-	mockClient.AssertRequestMade("POST", "/route-plans")
+	mockClient.AssertRequestMade("POST", "/routePlans")
 	mockClient.AssertBasicAuth("test_api_key")
 }
 
@@ -52,12 +52,12 @@ func TestClient_Get(t *testing.T) {
 	defer testingutil.CleanupTest(t, mockClient)
 
 	expectedRoutePlan := testingutil.GetSampleRoutePlan()
-	mockClient.AddResponse("/route-plans/routeplan_123", testingutil.MockResponse{
+	mockClient.AddResponse("/routePlans/routeplan_123", testingutil.MockResponse{
 		StatusCode: 200,
 		Body:       expectedRoutePlan,
 	})
 
-	client := Plug("test_api_key", nil, "https://api.example.com/route-plans", mockClient.MockCaller)
+	client := Plug("test_api_key", nil, "https://api.example.com/routePlans", mockClient.MockCaller)
 
 	routePlan, err := client.Get("routeplan_123")
 
@@ -67,7 +67,7 @@ func TestClient_Get(t *testing.T) {
 	assert.Equal(t, expectedRoutePlan.State, routePlan.State)
 	assert.Len(t, routePlan.Tasks, 3)
 
-	mockClient.AssertRequestMade("GET", "/route-plans/routeplan_123")
+	mockClient.AssertRequestMade("GET", "/routePlans/routeplan_123")
 }
 
 func TestClient_Update(t *testing.T) {
@@ -78,12 +78,12 @@ func TestClient_Update(t *testing.T) {
 	expectedRoutePlan.Name = "Updated Morning Route"
 	expectedRoutePlan.Color = "#00FF00"
 
-	mockClient.AddResponse("/route-plans/routeplan_123", testingutil.MockResponse{
+	mockClient.AddResponse("/routePlans/routeplan_123", testingutil.MockResponse{
 		StatusCode: 200,
 		Body:       expectedRoutePlan,
 	})
 
-	client := Plug("test_api_key", nil, "https://api.example.com/route-plans", mockClient.MockCaller)
+	client := Plug("test_api_key", nil, "https://api.example.com/routePlans", mockClient.MockCaller)
 
 	params := onfleet.RoutePlanParams{
 		Name:        "Updated Morning Route",
@@ -99,7 +99,7 @@ func TestClient_Update(t *testing.T) {
 	assert.Equal(t, "Updated Morning Route", routePlan.Name)
 	assert.Equal(t, "#00FF00", routePlan.Color)
 
-	mockClient.AssertRequestMade("PUT", "/route-plans/routeplan_123")
+	mockClient.AssertRequestMade("PUT", "/routePlans/routeplan_123")
 }
 
 func TestClient_AddTasks(t *testing.T) {
@@ -109,12 +109,12 @@ func TestClient_AddTasks(t *testing.T) {
 	expectedRoutePlan := testingutil.GetSampleRoutePlan()
 	expectedRoutePlan.Tasks = []string{"task_111", "task_222", "task_333", "task_444", "task_555"}
 
-	mockClient.AddResponse("/route-plans/routeplan_123", testingutil.MockResponse{
+	mockClient.AddResponse("/routePlans/routeplan_123", testingutil.MockResponse{
 		StatusCode: 200,
 		Body:       expectedRoutePlan,
 	})
 
-	client := Plug("test_api_key", nil, "https://api.example.com/route-plans", mockClient.MockCaller)
+	client := Plug("test_api_key", nil, "https://api.example.com/routePlans", mockClient.MockCaller)
 
 	params := onfleet.RoutePlanAddTasksParams{
 		Tasks: []string{"task_444", "task_555"},
@@ -128,28 +128,23 @@ func TestClient_AddTasks(t *testing.T) {
 	assert.Equal(t, "task_444", routePlan.Tasks[3])
 	assert.Equal(t, "task_555", routePlan.Tasks[4])
 
-	mockClient.AssertRequestMade("PUT", "/route-plans/routeplan_123")
+	mockClient.AssertRequestMade("PUT", "/routePlans/routeplan_123")
 }
 
 func TestClient_List(t *testing.T) {
 	mockClient := testingutil.SetupTest(t)
 	defer testingutil.CleanupTest(t, mockClient)
 
-	expectedRoutePlans := []onfleet.RoutePlan{
+	expectedResponse := []onfleet.RoutePlan{
 		testingutil.GetSampleRoutePlan(),
 	}
 
-	expectedResponse := onfleet.RoutePlansPaginated{
-		RoutePlans: expectedRoutePlans,
-		LastId:     "routeplan_123",
-	}
-
-	mockClient.AddResponse("/route-plans/all", testingutil.MockResponse{
+	mockClient.AddResponse("/routePlans", testingutil.MockResponse{
 		StatusCode: 200,
 		Body:       expectedResponse,
 	})
 
-	client := Plug("test_api_key", nil, "https://api.example.com/route-plans", mockClient.MockCaller)
+	client := Plug("test_api_key", nil, "https://api.example.com/routePlans", mockClient.MockCaller)
 
 	params := onfleet.RoutePlanListQueryParams{
 		WorkerId:        "worker_123",
@@ -161,31 +156,30 @@ func TestClient_List(t *testing.T) {
 		Limit:           10,
 	}
 
-	response, err := client.List(params)
+	RoutePlans, err := client.List(params)
 
 	assert.NoError(t, err)
-	assert.Len(t, response.RoutePlans, 1)
-	assert.Equal(t, expectedRoutePlans[0].Id, response.RoutePlans[0].Id)
-	assert.Equal(t, "routeplan_123", response.LastId)
+	assert.Len(t, RoutePlans, 1)
+	assert.Equal(t, expectedResponse[0].Id, RoutePlans[0].Id)
 
-	mockClient.AssertRequestMade("GET", "/route-plans/all")
+	mockClient.AssertRequestMade("GET", "/routePlans")
 }
 
 func TestClient_Delete(t *testing.T) {
 	mockClient := testingutil.SetupTest(t)
 	defer testingutil.CleanupTest(t, mockClient)
 
-	mockClient.AddResponse("/route-plans/routeplan_123", testingutil.MockResponse{
+	mockClient.AddResponse("/routePlans/routeplan_123", testingutil.MockResponse{
 		StatusCode: 200,
 		Body:       map[string]interface{}{"success": true},
 	})
 
-	client := Plug("test_api_key", nil, "https://api.example.com/route-plans", mockClient.MockCaller)
+	client := Plug("test_api_key", nil, "https://api.example.com/routePlans", mockClient.MockCaller)
 
 	err := client.Delete("routeplan_123")
 
 	assert.NoError(t, err)
-	mockClient.AssertRequestMade("DELETE", "/route-plans/routeplan_123")
+	mockClient.AssertRequestMade("DELETE", "/routePlans/routeplan_123")
 }
 
 func TestClient_VehicleTypes(t *testing.T) {
@@ -223,12 +217,12 @@ func TestClient_VehicleTypes(t *testing.T) {
 			expectedRoutePlan := testingutil.GetSampleRoutePlan()
 			expectedRoutePlan.VehicleType = tt.vehicleType
 
-			mockClient.AddResponse("/route-plans", testingutil.MockResponse{
+			mockClient.AddResponse("/routePlans", testingutil.MockResponse{
 				StatusCode: 201,
 				Body:       expectedRoutePlan,
 			})
 
-			client := Plug("test_api_key", nil, "https://api.example.com/route-plans", mockClient.MockCaller)
+			client := Plug("test_api_key", nil, "https://api.example.com/routePlans", mockClient.MockCaller)
 
 			params := onfleet.RoutePlanParams{
 				Name:        "Vehicle Type Test Route",
@@ -293,12 +287,12 @@ func TestClient_PositionTypes(t *testing.T) {
 				expectedRoutePlan.EndingHubId = nil
 			}
 
-			mockClient.AddResponse("/route-plans", testingutil.MockResponse{
+			mockClient.AddResponse("/routePlans", testingutil.MockResponse{
 				StatusCode: 201,
 				Body:       expectedRoutePlan,
 			})
 
-			client := Plug("test_api_key", nil, "https://api.example.com/route-plans", mockClient.MockCaller)
+			client := Plug("test_api_key", nil, "https://api.example.com/routePlans", mockClient.MockCaller)
 
 			params := onfleet.RoutePlanParams{
 				Name:          "Position Test Route",
@@ -351,12 +345,12 @@ func TestClient_RoutePlanStates(t *testing.T) {
 			expectedRoutePlan := testingutil.GetSampleRoutePlan()
 			expectedRoutePlan.State = tt.state
 
-			mockClient.AddResponse("/route-plans/routeplan_123", testingutil.MockResponse{
+			mockClient.AddResponse("/routePlans/routeplan_123", testingutil.MockResponse{
 				StatusCode: 200,
 				Body:       expectedRoutePlan,
 			})
 
-			client := Plug("test_api_key", nil, "https://api.example.com/route-plans", mockClient.MockCaller)
+			client := Plug("test_api_key", nil, "https://api.example.com/routePlans", mockClient.MockCaller)
 
 			routePlan, err := client.Get("routeplan_123")
 
@@ -377,7 +371,7 @@ func TestClient_ErrorScenarios(t *testing.T) {
 		{
 			name:       "create invalid start time",
 			method:     "POST",
-			url:        "/route-plans",
+			url:        "/routePlans",
 			statusCode: 400,
 			operation: func(client *Client) error {
 				_, err := client.Create(onfleet.RoutePlanParams{
@@ -390,7 +384,7 @@ func TestClient_ErrorScenarios(t *testing.T) {
 		{
 			name:       "create missing worker and team",
 			method:     "POST",
-			url:        "/route-plans",
+			url:        "/routePlans",
 			statusCode: 400,
 			operation: func(client *Client) error {
 				_, err := client.Create(onfleet.RoutePlanParams{
@@ -404,7 +398,7 @@ func TestClient_ErrorScenarios(t *testing.T) {
 		{
 			name:       "get not found",
 			method:     "GET",
-			url:        "/route-plans/nonexistent",
+			url:        "/routePlans/nonexistent",
 			statusCode: 404,
 			operation: func(client *Client) error {
 				_, err := client.Get("nonexistent")
@@ -414,7 +408,7 @@ func TestClient_ErrorScenarios(t *testing.T) {
 		{
 			name:       "update not found",
 			method:     "PUT",
-			url:        "/route-plans/nonexistent",
+			url:        "/routePlans/nonexistent",
 			statusCode: 404,
 			operation: func(client *Client) error {
 				_, err := client.Update("nonexistent", onfleet.RoutePlanParams{
@@ -427,7 +421,7 @@ func TestClient_ErrorScenarios(t *testing.T) {
 		{
 			name:       "add tasks to completed route plan",
 			method:     "PUT",
-			url:        "/route-plans/completed_123",
+			url:        "/routePlans/completed_123",
 			statusCode: 400,
 			operation: func(client *Client) error {
 				_, err := client.AddTasks("completed_123", onfleet.RoutePlanAddTasksParams{
@@ -439,7 +433,7 @@ func TestClient_ErrorScenarios(t *testing.T) {
 		{
 			name:       "delete active route plan",
 			method:     "DELETE",
-			url:        "/route-plans/active_123",
+			url:        "/routePlans/active_123",
 			statusCode: 409,
 			operation: func(client *Client) error {
 				return client.Delete("active_123")
@@ -448,7 +442,7 @@ func TestClient_ErrorScenarios(t *testing.T) {
 		{
 			name:       "list unauthorized",
 			method:     "GET",
-			url:        "/route-plans/all",
+			url:        "/routePlans/all",
 			statusCode: 401,
 			operation: func(client *Client) error {
 				_, err := client.List(onfleet.RoutePlanListQueryParams{})
@@ -467,7 +461,7 @@ func TestClient_ErrorScenarios(t *testing.T) {
 				Body:       testingutil.GetSampleErrorResponse(),
 			})
 
-			client := Plug("test_api_key", nil, "https://api.example.com/route-plans", mockClient.MockCaller)
+			client := Plug("test_api_key", nil, "https://api.example.com/routePlans", mockClient.MockCaller)
 
 			err := tt.operation(client)
 			assert.Error(t, err)

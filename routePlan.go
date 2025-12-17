@@ -58,8 +58,3 @@ type RoutePlanListQueryParams struct {
 type RoutePlanAddTasksParams struct {
 	Tasks []string `json:"tasks"`
 }
-
-type RoutePlansPaginated struct {
-	LastId     string      `json:"lastId,omitempty"`
-	RoutePlans []RoutePlan `json:"routePlans"`
-}
